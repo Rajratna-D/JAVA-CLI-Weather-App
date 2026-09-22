@@ -1,0 +1,23 @@
+# Virtual Environment (.venv) Structure Example
+# 
+# The Python virtual environment is initialized locally using:
+#   python -m venv .venv
+#
+# Standard .venv directory layout:
+# .venv/
+# ├── Include/
+# ├── Lib/
+# │   └── site-packages/
+# ├── Scripts/          # (Windows)
+# │   ├── activate
+# │   ├── Activate.ps1
+# │   └── python.exe
+# ├── bin/              # (macOS / Linux)
+# │   ├── activate
+# │   └── python
+# └── pyvenv.cfg
+#
+# How to activate:
+# - Windows (PowerShell): .venv\Scripts\Activate.ps1
+# - Windows (cmd.exe):   .venv\Scripts\activate.bat
+# - Linux / macOS:       source .venv/bin/activate
