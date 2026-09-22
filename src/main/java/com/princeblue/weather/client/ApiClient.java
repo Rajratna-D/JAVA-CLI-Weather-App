@@ -1,6 +1,8 @@
 package com.princeblue.weather.client;
 
+import com.princeblue.weather.exception.WeatherAppException;
+
 public interface ApiClient {
 
-    String get(String url);
+    String fetchWeatherData(String cityName) throws WeatherAppException;
 }

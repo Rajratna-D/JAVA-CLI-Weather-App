@@ -1,10 +1,32 @@
+@"
+# Build outputs
 target/
+bin/
+*.class
 
-src/main/resources/config.properties
-
-.vscode/
+# IDE and Editor configurations
 .idea/
 *.iml
+.vscode/
 
+# Application Secrets and Environment
+src/main/resources/config.properties
+.env
+.env.local
+
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Documentation files (excluded from repository push)
+java-weather-app-plan.md
+java-weather-app-plan.pdf
+"@ | Set-Content .gitignore
