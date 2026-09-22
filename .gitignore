@@ -1,0 +1,10 @@
+target/
+
+src/main/resources/config.properties
+
+.vscode/
+.idea/
+*.iml
+
+.DS_Store
+Thumbs.db
