@@ -8,27 +8,36 @@ import com.princeblue.weather.exception.WeatherAppException;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Objects;
 
 public class OpenWeatherClient implements ApiClient {
 
     private final HttpClient httpClient;
     private final AppConfig config;
 
+    public OpenWeatherClient(AppConfig config) {
+        this(HttpClient.newHttpClient(), config);
+    }
+
     public OpenWeatherClient(HttpClient httpClient, AppConfig config) {
-        this.httpClient = httpClient;
-        this.config = config;
+        this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
+        this.config = Objects.requireNonNull(config, "config must not be null");
     }
 
     @Override
     public String fetchWeatherData(String cityName) throws WeatherAppException {
 
+        String encodedCity = URLEncoder.encode(cityName.trim(), StandardCharsets.UTF_8);
         String url = "https://api.openweathermap.org/data/2.5/weather"
-                + "?q=" + cityName.trim()
-                + "&appid=" + config.getApiKey();
+                + "?q=" + encodedCity
+                + "&appid=" + config.getApiKey()
+                + "&units=metric";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))

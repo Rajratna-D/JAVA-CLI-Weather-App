@@ -95,4 +95,24 @@ class OpenWeatherClientTest {
                 ApiUnavailableException.class,
                 () -> client.fetchWeatherData("Pune"));
     }
+
+    @Test
+    void shouldHandleCityNamesWithSpaces() throws Exception {
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("{\"name\":\"New York\"}");
+
+        when(httpClient.send(any(), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(response);
+
+        String result = client.fetchWeatherData("New York");
+
+        assertEquals("{\"name\":\"New York\"}", result);
+    }
+
+    @Test
+    void shouldInitializeWithConvenienceConstructor() {
+        OpenWeatherClient defaultClient = new OpenWeatherClient(config);
+        assertNotNull(defaultClient);
+    }
 }
