@@ -1,3 +1,4 @@
+@"
 # Build outputs
 target/
 bin/
@@ -21,6 +22,11 @@ env/
 __pycache__/
 *.pyc
 
+# OS files
+.DS_Store
+Thumbs.db
+
 # Documentation files (excluded from repository push)
 java-weather-app-plan.md
 java-weather-app-plan.pdf
+"@ | Set-Content .gitignore
