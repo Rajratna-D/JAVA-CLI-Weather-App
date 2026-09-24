@@ -1,4 +1,3 @@
-@"
 # Build outputs
 target/
 bin/
@@ -26,7 +25,25 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Documentation files (excluded from repository push)
+# Documentation & plan files (excluded from repository push)
 java-weather-app-plan.md
 java-weather-app-plan.pdf
-"@ | Set-Content .gitignore
+database_plan.md
+ml_plan.md
+*plan*.md
+*plan*.pdf
+
+# SQLite database (user-specific data)
+weather.db
+weather.db-journal
+weather.db-wal
+*.db
+*.db-journal
+*.db-wal
+
+# ML models and artifacts
+ml/models/*
+!ml/models/.gitkeep
+ml/.venv/
+ml/__pycache__/
+*.pkl
