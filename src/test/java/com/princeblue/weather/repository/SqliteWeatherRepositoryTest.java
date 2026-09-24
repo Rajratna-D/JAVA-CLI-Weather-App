@@ -142,4 +142,22 @@ public class SqliteWeatherRepositoryTest {
         assertEquals(25.0, retrieved.get(0).predictedTempAvg());
         assertEquals("Sunny", retrieved.get(0).conditionSummary());
     }
+
+    @Test
+    void saveAndGetPredictions_withMultiVariateFields_persistsHumidityAndRain() {
+        LocalDate today = LocalDate.now();
+        List<WeatherPrediction> predictions = List.of(
+                new WeatherPrediction(today, 24.5, 18.0, 31.0, 82.5, 88.0, 5.4, "Rain Likely", Instant.now()),
+                new WeatherPrediction(today.plusDays(1), 25.0, 19.0, 32.0, 75.0, 35.0, 1.2, "Showers", Instant.now()));
+
+        repository.savePredictions(predictions);
+
+        List<WeatherPrediction> retrieved = repository.getPredictions(today);
+        assertEquals(2, retrieved.size());
+        assertEquals(24.5, retrieved.get(0).predictedTempAvg());
+        assertEquals(82.5, retrieved.get(0).predictedHumidity());
+        assertEquals(88.0, retrieved.get(0).predictedRainProb());
+        assertEquals(5.4, retrieved.get(0).predictedRainfallMm());
+        assertEquals("Rain Likely", retrieved.get(0).conditionSummary());
+    }
 }

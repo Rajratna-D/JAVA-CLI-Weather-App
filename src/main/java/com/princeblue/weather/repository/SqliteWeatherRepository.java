@@ -101,13 +101,37 @@ public class SqliteWeatherRepository implements WeatherRepository {
                             predicted_temp_avg REAL NOT NULL,
                             predicted_temp_min REAL NOT NULL,
                             predicted_temp_max REAL NOT NULL,
+                            predicted_humidity REAL DEFAULT 0.0,
+                            predicted_rain_prob REAL DEFAULT 0.0,
+                            predicted_rainfall_mm REAL DEFAULT 0.0,
                             condition_summary TEXT,
                             created_at INTEGER NOT NULL
                         );
                     """);
 
+            // Migrate schema if columns do not exist in existing table
+            ensureColumnExists(conn, "predictions", "predicted_humidity", "REAL DEFAULT 0.0");
+            ensureColumnExists(conn, "predictions", "predicted_rain_prob", "REAL DEFAULT 0.0");
+            ensureColumnExists(conn, "predictions", "predicted_rainfall_mm", "REAL DEFAULT 0.0");
+
         } catch (SQLException e) {
             throw new RuntimeException("Failed to initialize SQLite database: " + e.getMessage(), e);
+        }
+    }
+
+    private void ensureColumnExists(Connection conn, String table, String column, String typeDef) {
+        try (Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + table + ");")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return;
+                }
+            }
+        } catch (SQLException ignored) {
+        }
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + typeDef + ";");
+        } catch (SQLException ignored) {
         }
     }
 
@@ -398,8 +422,9 @@ public class SqliteWeatherRepository implements WeatherRepository {
     public void savePredictions(List<WeatherPrediction> predictions) {
         String sql = """
                     INSERT OR REPLACE INTO predictions
-                    (forecast_date, predicted_temp_avg, predicted_temp_min, predicted_temp_max, condition_summary, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (forecast_date, predicted_temp_avg, predicted_temp_min, predicted_temp_max,
+                     predicted_humidity, predicted_rain_prob, predicted_rainfall_mm, condition_summary, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         try (Connection conn = getConnection()) {
@@ -410,8 +435,11 @@ public class SqliteWeatherRepository implements WeatherRepository {
                     pstmt.setDouble(2, p.predictedTempAvg());
                     pstmt.setDouble(3, p.predictedTempMin());
                     pstmt.setDouble(4, p.predictedTempMax());
-                    pstmt.setString(5, p.conditionSummary());
-                    pstmt.setLong(6, p.createdAt().toEpochMilli());
+                    pstmt.setDouble(5, p.predictedHumidity());
+                    pstmt.setDouble(6, p.predictedRainProb());
+                    pstmt.setDouble(7, p.predictedRainfallMm());
+                    pstmt.setString(8, p.conditionSummary());
+                    pstmt.setLong(9, p.createdAt().toEpochMilli());
                     pstmt.addBatch();
                 }
                 pstmt.executeBatch();
@@ -431,6 +459,7 @@ public class SqliteWeatherRepository implements WeatherRepository {
     public List<WeatherPrediction> getPredictions(LocalDate fromDate) {
         String sql = """
                     SELECT forecast_date, predicted_temp_avg, predicted_temp_min, predicted_temp_max,
+                           predicted_humidity, predicted_rain_prob, predicted_rainfall_mm,
                            condition_summary, created_at
                     FROM predictions
                     WHERE forecast_date >= ?
@@ -450,6 +479,9 @@ public class SqliteWeatherRepository implements WeatherRepository {
                             rs.getDouble("predicted_temp_avg"),
                             rs.getDouble("predicted_temp_min"),
                             rs.getDouble("predicted_temp_max"),
+                            rs.getDouble("predicted_humidity"),
+                            rs.getDouble("predicted_rain_prob"),
+                            rs.getDouble("predicted_rainfall_mm"),
                             rs.getString("condition_summary"),
                             Instant.ofEpochMilli(rs.getLong("created_at"))));
                 }

@@ -126,7 +126,8 @@ public class HomeCityService {
      * Checks if the trained Prophet model file exists on disk.
      */
     public boolean isAiModelAvailable() {
-        java.io.File modelFile = new java.io.File("ml/models/prophet_weather_model.pkl");
-        return modelFile.exists() && modelFile.length() > 0;
+        java.io.File tempModel = new java.io.File("ml/models/prophet_temp_model.pkl");
+        java.io.File legacyModel = new java.io.File("ml/models/prophet_weather_model.pkl");
+        return (tempModel.exists() && tempModel.length() > 0) || (legacyModel.exists() && legacyModel.length() > 0);
     }
 }

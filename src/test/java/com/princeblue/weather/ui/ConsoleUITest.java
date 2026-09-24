@@ -142,8 +142,8 @@ public class ConsoleUITest {
         Location loc = new Location("Pune", "IN", 18.52, 73.86);
         Weather weather = new Weather(loc, 28.0, 27.5, 55, "clear sky", 2.5);
         java.util.List<com.princeblue.weather.model.WeatherPrediction> preds = java.util.List.of(
-                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now(), 26.5, 21.2, 31.8, "Clear sky", java.time.Instant.now()),
-                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(1), 27.0, 22.0, 32.5, "Partly cloudy", java.time.Instant.now())
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now(), 26.5, 21.2, 31.8, 85.0, 95.0, 8.5, "Rain Likely", java.time.Instant.now()),
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(1), 27.0, 22.0, 32.5, 60.0, 35.0, 1.2, "Partly cloudy", java.time.Instant.now())
         );
 
         when(mockHomeService.getHomeCityConfig()).thenReturn(java.util.Optional.of(cfg));

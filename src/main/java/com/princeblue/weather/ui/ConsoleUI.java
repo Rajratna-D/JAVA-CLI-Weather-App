@@ -187,6 +187,12 @@ public class ConsoleUI {
         out.println(borderPrefix + content + " ".repeat(pad) + borderSuffix);
     }
 
+    private static String padRight(String str, int targetWidth) {
+        if (str == null) return " ".repeat(targetWidth);
+        int vWidth = visualWidth(str);
+        return str + " ".repeat(Math.max(0, targetWidth - vWidth));
+    }
+
     private static String truncate(String text, int maxLen) {
         if (text == null) return "";
         if (text.length() <= maxLen) return text;
@@ -331,8 +337,8 @@ public class ConsoleUI {
     }
 
     private void executeAiTrainingWithProgress() {
-        out.println(CYAN + "🧠 [3/3] Training Facebook Prophet AI model & generating 7-day predictions..." + RESET);
-        out.println(GRAY + "   Estimated time: ~30-35 seconds • Analyzing 10-year hourly dataset..." + RESET);
+        out.println(CYAN + "🧠 [3/3] Training Facebook Prophet AI model & Scikit-Learn engines (Temp, Humidity & Rain)..." + RESET);
+        out.println(GRAY + "   Estimated time: ~25-30 seconds • Analyzing 10-year hourly climate dataset..." + RESET);
 
         long start = System.currentTimeMillis();
         int lastMilestone = -1;
@@ -360,7 +366,7 @@ public class ConsoleUI {
             readerThread.start();
 
             // Print first milestone immediately
-            out.println(GRAY + "   ⏳ Initializing Prophet model and loading hourly records..." + RESET);
+            out.println(GRAY + "   ⏳ Initializing Prophet & Scikit-Learn training pipelines..." + RESET);
 
             // Print clean milestone updates every ~8 seconds
             while (process.isAlive()) {
@@ -370,13 +376,13 @@ public class ConsoleUI {
                 if (milestone > lastMilestone) {
                     lastMilestone = milestone;
                     if (elapsedSec >= 8 && elapsedSec < 16) {
-                        out.println(GRAY + "   ⏳ Running Stan optimization on 87,600 temperature points... (" + elapsedSec + "s elapsed)" + RESET);
+                        out.println(GRAY + "   ⏳ Training Prophet temperature model on 10-year hourly cycles... (" + elapsedSec + "s elapsed)" + RESET);
                     } else if (elapsedSec >= 16 && elapsedSec < 24) {
-                        out.println(GRAY + "   ⏳ Fitting yearly seasonality and diurnal day/night cycles... (" + elapsedSec + "s elapsed)" + RESET);
+                        out.println(GRAY + "   ⏳ Training Prophet relative humidity model on diurnal cycles... (" + elapsedSec + "s elapsed)" + RESET);
                     } else if (elapsedSec >= 24 && elapsedSec < 32) {
-                        out.println(GRAY + "   ⏳ Projecting future 168 hours and computing confidence intervals... (" + elapsedSec + "s elapsed)" + RESET);
+                        out.println(GRAY + "   ⏳ Training Scikit-Learn rain probability & precipitation engines... (" + elapsedSec + "s elapsed)" + RESET);
                     } else if (elapsedSec >= 32) {
-                        out.println(GRAY + "   ⏳ Finalizing daily forecasts and saving predictions into SQLite... (" + elapsedSec + "s elapsed)" + RESET);
+                        out.println(GRAY + "   ⏳ Projecting 7-day multi-variate forecast & saving to SQLite... (" + elapsedSec + "s elapsed)" + RESET);
                     }
                 }
 
@@ -392,7 +398,7 @@ public class ConsoleUI {
             long totalSec = (System.currentTimeMillis() - start) / 1000;
 
             if (exitCode == 0) {
-                out.println(GREEN + "🎉 AI model trained and 7-day predictions generated successfully! (" + totalSec + "s)" + RESET);
+                out.println(GREEN + "🎉 AI models trained: Temperature, Humidity & Rain predictions ready! (" + totalSec + "s)" + RESET);
             } else {
                 out.println(RED + "❌ AI training failed with exit code " + exitCode + " (" + totalSec + "s)" + RESET);
                 out.println(GRAY + "Details:\n" + outputLog + RESET);
@@ -443,18 +449,41 @@ public class ConsoleUI {
         }
 
         out.println("\n" + YELLOW + "╔" + TABLE_BAR_DOUBLE + "╗" + RESET);
-        printBoxRow("🤖  " + BOLD + "AI WEATHER PREDICTIONS (Facebook Prophet - Next 7 Days)" + RESET, 70, YELLOW + "║ " + RESET, YELLOW + " ║" + RESET);
+        printBoxRow("🤖  " + BOLD + "AI WEATHER PREDICTIONS (Temp, Humidity & Rain • 7 Days)" + RESET, 70, YELLOW + "║ " + RESET, YELLOW + " ║" + RESET);
         out.println(YELLOW + "╠" + TABLE_BAR_DOUBLE + "╣" + RESET);
-        String predHeader = String.format("%-12s | %-10s | %-20s | %-19s", "Date", "Avg Temp", "Min - Max Temp", "Forecast Summary");
+        String predHeader = padRight("Date", 10) + " | "
+                + padRight("Temp (Avg/Range)", 16) + " | "
+                + padRight("Humidity", 8) + " | "
+                + padRight("Rain %", 10) + " | "
+                + padRight("Summary", 14);
         printBoxRow(GRAY + predHeader + RESET, 70, YELLOW + "║ " + RESET, YELLOW + " ║" + RESET);
         out.println(YELLOW + "╟" + TABLE_BAR_SINGLE + "╢" + RESET);
 
         for (WeatherPrediction p : predictions) {
-            String avg = formatTemperature(p.predictedTempAvg());
-            String minMax = formatTemperature(p.predictedTempMin()) + " - " + formatTemperature(p.predictedTempMax());
+            String tempAvg = formatTemperature(p.predictedTempAvg());
+            String tempRange = String.format(Locale.US, "%s (%.0f-%.0f%s)",
+                    tempAvg,
+                    isMetric ? p.predictedTempMin() : (p.predictedTempMin() * 9.0 / 5.0 + 32.0),
+                    isMetric ? p.predictedTempMax() : (p.predictedTempMax() * 9.0 / 5.0 + 32.0),
+                    isMetric ? "°C" : "°F");
+
+            String humStr = String.format(Locale.US, "💧 %.0f%%", p.predictedHumidity());
+
+            String rainStr;
+            if (p.predictedRainProb() >= 60.0) {
+                rainStr = String.format(Locale.US, "🌧️ %.0f%%", p.predictedRainProb());
+            } else if (p.predictedRainProb() >= 25.0) {
+                rainStr = String.format(Locale.US, "🌦️ %.0f%%", p.predictedRainProb());
+            } else {
+                rainStr = String.format(Locale.US, "☀️ %.0f%%", p.predictedRainProb());
+            }
+
             String summary = p.conditionSummary() != null ? p.conditionSummary() : "Normal";
-            String row = String.format(Locale.US, "%-12s | %-10s | %-20s | %-19s",
-                    p.forecastDate().toString(), avg, minMax, truncate(summary, 19));
+            String row = padRight(p.forecastDate().toString(), 10) + " | "
+                    + padRight(tempRange, 16) + " | "
+                    + padRight(humStr, 8) + " | "
+                    + padRight(rainStr, 10) + " | "
+                    + padRight(truncate(summary, 14), 14);
             printBoxRow(row, 70, YELLOW + "║ " + RESET, YELLOW + " ║" + RESET);
         }
         out.println(YELLOW + "╚" + TABLE_BAR_DOUBLE + "╝" + RESET);

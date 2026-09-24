@@ -47,3 +47,4 @@ ml/models/*
 ml/.venv/
 ml/__pycache__/
 *.pkl
+*.joblib
