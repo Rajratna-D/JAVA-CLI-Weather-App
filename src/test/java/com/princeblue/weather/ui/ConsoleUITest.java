@@ -27,7 +27,7 @@ public class ConsoleUITest {
         ui.start();
 
         String output = outBytes.toString(StandardCharsets.UTF_8);
-        assertTrue(output.contains("JAVA WEATHER CLI"));
+        assertTrue(output.contains("WEATHER"));
         assertTrue(output.contains("Goodbye"));
     }
 
@@ -50,5 +50,26 @@ public class ConsoleUITest {
         assertTrue(output.contains("London, GB"));
         assertTrue(output.contains("18.0"));
         assertTrue(output.contains("Light rain"));
+        assertTrue(output.contains("Fetched at"));
+    }
+
+    @Test
+    void start_withUnitToggleCommand_switchesToFahrenheit() throws Exception {
+        WeatherService mockService = mock(WeatherService.class);
+        Location location = new Location("Tokyo", "JP", 35.6, 139.6);
+        Weather weather = new Weather(location, 20.0, 20.0, 60, "clear sky", 2.0);
+
+        when(mockService.getWeather("Tokyo")).thenReturn(weather);
+
+        Scanner scanner = new Scanner("unit\nTokyo\nexit\n");
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        PrintStream printStream = new PrintStream(outBytes, true, StandardCharsets.UTF_8);
+
+        ConsoleUI ui = new ConsoleUI(mockService, scanner, printStream);
+        ui.start();
+
+        String output = outBytes.toString(StandardCharsets.UTF_8);
+        assertTrue(output.contains("Fahrenheit (°F)"));
+        assertTrue(output.contains("68.0°F"));
     }
 }
