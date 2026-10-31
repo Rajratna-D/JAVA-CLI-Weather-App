@@ -2,6 +2,7 @@ package com.princeblue.weather.service;
 
 import com.princeblue.weather.client.ApiClient;
 import com.princeblue.weather.exception.WeatherAppException;
+import com.princeblue.weather.model.Location;
 import com.princeblue.weather.model.SearchRecord;
 import com.princeblue.weather.model.Weather;
 import com.princeblue.weather.repository.WeatherRepository;
@@ -32,7 +33,7 @@ public class WeatherService {
         this.apiClient = Objects.requireNonNull(apiClient, "apiClient must not be null");
         this.weatherMapper = Objects.requireNonNull(weatherMapper, "weatherMapper must not be null");
         this.repository = repository;
-        this.cacheTtlMinutes = cacheTtlMinutes;
+        this.cacheTtlMinutes = Math.max(0, cacheTtlMinutes);
     }
 
     public Weather getWeather(String cityName) throws WeatherAppException {
@@ -58,6 +59,25 @@ public class WeatherService {
         // 3. Save to Cache & Search History
         if (repository != null) {
             repository.saveWeatherCache(freshWeather);
+
+            // If the query was qualified (e.g. "London, UK"), also cache under the query name
+            // so subsequent lookups for the same query string hit the TTL cache.
+            if (!cleanCity.equalsIgnoreCase(freshWeather.getLocation().getCity())) {
+                Location aliasLocation = new Location(
+                        cleanCity,
+                        freshWeather.getLocation().getCountry(),
+                        freshWeather.getLocation().getLatitude(),
+                        freshWeather.getLocation().getLongitude());
+                Weather aliasWeather = new Weather(
+                        aliasLocation,
+                        freshWeather.getTemperature(),
+                        freshWeather.getFeelsLike(),
+                        freshWeather.getHumidity(),
+                        freshWeather.getDescription(),
+                        freshWeather.getWindSpeed());
+                repository.saveWeatherCache(aliasWeather);
+            }
+
             repository.addSearchHistory(freshWeather);
         }
 

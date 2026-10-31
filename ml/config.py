@@ -8,8 +8,14 @@ PROJECT_DIR = BASE_DIR.parent
 DB_PATH = PROJECT_DIR / "weather.db"
 MODEL_DIR = BASE_DIR / "models"
 
+# Safe JSON model paths (preferred)
+TEMP_MODEL_JSON_PATH = MODEL_DIR / "prophet_temp_model.json"
+HUMIDITY_MODEL_JSON_PATH = MODEL_DIR / "prophet_humidity_model.json"
+
+# Pickle model paths (backwards compatibility)
 TEMP_MODEL_PATH = MODEL_DIR / "prophet_temp_model.pkl"
 HUMIDITY_MODEL_PATH = MODEL_DIR / "prophet_humidity_model.pkl"
+
 RAIN_MODEL_PATH = MODEL_DIR / "rain_classifier.joblib"
 RAINFALL_MODEL_PATH = MODEL_DIR / "rainfall_regressor.joblib"
 

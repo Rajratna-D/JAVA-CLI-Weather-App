@@ -79,6 +79,10 @@ public class ConsoleUI {
             String unitBadge = isMetric ? CYAN + "[°C]" + RESET : YELLOW + "[°F]" + RESET;
             out.print("\n" + BLUE + "[Weather " + unitBadge + BLUE + "]" + RESET
                     + " Enter city (or 'history', 'home', 'unit', 'exit') > ");
+            if (!scanner.hasNextLine()) {
+                printExitMessage();
+                break;
+            }
             String input = scanner.nextLine().trim();
 
             if (input.equalsIgnoreCase("exit") || input.equalsIgnoreCase("quit") || input.equalsIgnoreCase("q")) {
@@ -183,6 +187,10 @@ public class ConsoleUI {
 
     private void printBoxRow(String content, int targetWidth, String borderPrefix, String borderSuffix) {
         int vWidth = visualWidth(content);
+        if (vWidth > targetWidth) {
+            content = truncateVisual(content, targetWidth);
+            vWidth = visualWidth(content);
+        }
         int pad = Math.max(0, targetWidth - vWidth);
         out.println(borderPrefix + content + " ".repeat(pad) + borderSuffix);
     }
@@ -190,7 +198,65 @@ public class ConsoleUI {
     private static String padRight(String str, int targetWidth) {
         if (str == null) return " ".repeat(targetWidth);
         int vWidth = visualWidth(str);
+        if (vWidth > targetWidth) {
+            str = truncateVisual(str, targetWidth);
+            vWidth = visualWidth(str);
+        }
         return str + " ".repeat(Math.max(0, targetWidth - vWidth));
+    }
+
+    private static String truncateVisual(String text, int maxVisualWidth) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        if (visualWidth(text) <= maxVisualWidth) {
+            return text;
+        }
+        int target = Math.max(0, maxVisualWidth - 1); // reserve 1 column for '…'
+        StringBuilder sb = new StringBuilder();
+        int currentWidth = 0;
+        boolean hasAnsi = text.contains("\u001B");
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+
+            // Preserve ANSI escape codes intact without counting toward visual column limit
+            if (c == '\u001B' && i + 1 < text.length() && text.charAt(i + 1) == '[') {
+                int mIdx = text.indexOf('m', i + 2);
+                if (mIdx != -1) {
+                    sb.append(text, i, mIdx + 1);
+                    i = mIdx;
+                    continue;
+                }
+            }
+
+            int charWidth;
+            int nextI = i;
+            if (c == '\uFE0F') {
+                charWidth = 0;
+            } else if (Character.isHighSurrogate(c)) {
+                charWidth = 2;
+                if (i + 1 < text.length()) {
+                    nextI = i + 1;
+                }
+            } else if ((c >= 0x2600 && c <= 0x27BF) || (c >= 0x2B50 && c <= 0x2B55)) {
+                charWidth = 2;
+            } else {
+                charWidth = 1;
+            }
+
+            if (currentWidth + charWidth > target) {
+                break;
+            }
+            sb.append(c);
+            if (nextI > i) {
+                sb.append(text.charAt(nextI));
+                i = nextI;
+            }
+            currentWidth += charWidth;
+        }
+        String res = sb.toString().trim() + "…";
+        return hasAnsi ? res + RESET : res;
     }
 
     private static String truncate(String text, int maxLen) {
@@ -263,6 +329,9 @@ public class ConsoleUI {
             out.println(CYAN + "╚" + CARD_BAR_DOUBLE + "╝" + RESET);
             out.println(YELLOW + "🏠 No Home City configured yet." + RESET);
             out.print("Enter your home city name (e.g. Pune, Tokyo, London) > ");
+            if (!scanner.hasNextLine()) {
+                return;
+            }
             String cityName = scanner.nextLine().trim();
             if (cityName.isEmpty() || cityName.equalsIgnoreCase("back") || cityName.equalsIgnoreCase("b")) {
                 return;
@@ -275,16 +344,22 @@ public class ConsoleUI {
 
         while (true) {
             out.println("\n" + BOLD + "Home City Options:" + RESET);
-            out.println("  1. " + CYAN + "Change Home City (Auto-syncs 10-year data & trains AI)" + RESET);
+            out.println("  1. " + CYAN + "Change Home City (Auto-syncs 12-year data & trains AI)" + RESET);
             out.println("  2. " + YELLOW + "Refresh / Retrain AI Predictions" + RESET);
             out.println("  3. " + GREEN + "View Live Weather & 7-Day Forecast" + RESET);
             out.println("  4. " + GRAY + "Back to Main Search" + RESET);
             out.print("Select an option (1-4) > ");
 
+            if (!scanner.hasNextLine()) {
+                break;
+            }
             String choice = scanner.nextLine().trim();
 
             if (choice.equals("1")) {
                 out.print("Enter new home city name (e.g. London, Tokyo, Pune) > ");
+                if (!scanner.hasNextLine()) {
+                    break;
+                }
                 String newCity = scanner.nextLine().trim();
                 if (!newCity.isEmpty() && !newCity.equalsIgnoreCase("back") && !newCity.equalsIgnoreCase("b")) {
                     setupHomeCityAndTrainAi(newCity);
@@ -314,11 +389,11 @@ public class ConsoleUI {
             out.println(GREEN + "✅ Location resolved: " + BOLD + cfg.cityName()
                     + " (" + cfg.latitude() + "°, " + cfg.longitude() + "°)" + RESET);
 
-            // Step 2: Download 10 years of hourly historical climate data
-            out.println(GRAY + "📥 [2/3] Fetching 10 years of hourly climate data (~87,600 records) from Open-Meteo..." + RESET);
+            // Step 2: Download 12 years of hourly historical climate data
+            out.println(GRAY + "📥 [2/3] Fetching 12 years of hourly climate data (~105,120 records) from Open-Meteo..." + RESET);
             out.println(GRAY + "   (Direct archive API • No API key required • Est: ~2-4s)..." + RESET);
             long syncStart = System.currentTimeMillis();
-            int syncedCount = homeCityService.syncHistoricalData(10);
+            int syncedCount = homeCityService.syncHistoricalData(12);
             long syncDuration = Math.max(1, (System.currentTimeMillis() - syncStart) / 1000);
             out.println(GREEN + "✅ Successfully saved " + BOLD + String.format(Locale.US, "%,d", syncedCount)
                     + " hourly records" + RESET + GREEN + " into SQLite cache! (" + syncDuration + "s)" + RESET);
@@ -338,23 +413,25 @@ public class ConsoleUI {
 
     private void executeAiTrainingWithProgress() {
         out.println(CYAN + "🧠 [3/3] Training Facebook Prophet AI model & Scikit-Learn engines (Temp, Humidity & Rain)..." + RESET);
-        out.println(GRAY + "   Estimated time: ~25-30 seconds • Analyzing 10-year hourly climate dataset..." + RESET);
+        out.println(GRAY + "   Estimated time: ~25-30 seconds • Analyzing 12-year hourly climate dataset..." + RESET);
 
         long start = System.currentTimeMillis();
         int lastMilestone = -1;
 
+        Process process = null;
         try {
-            Process process = homeCityService.startAiPipelineProcess();
+            process = homeCityService.startAiPipelineProcess();
             if (process == null) {
                 out.println(YELLOW + "ℹ️ AI training process skipped or unavailable." + RESET);
                 return;
             }
 
+            final Process activeProcess = process;
             // Consume process output in background to prevent OS buffer deadlock
             StringBuilder outputLog = new StringBuilder();
             Thread readerThread = new Thread(() -> {
                 try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                        new InputStreamReader(activeProcess.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         outputLog.append(line).append("\n");
@@ -376,7 +453,7 @@ public class ConsoleUI {
                 if (milestone > lastMilestone) {
                     lastMilestone = milestone;
                     if (elapsedSec >= 8 && elapsedSec < 16) {
-                        out.println(GRAY + "   ⏳ Training Prophet temperature model on 10-year hourly cycles... (" + elapsedSec + "s elapsed)" + RESET);
+                        out.println(GRAY + "   ⏳ Training Prophet temperature model on 12-year hourly cycles... (" + elapsedSec + "s elapsed)" + RESET);
                     } else if (elapsedSec >= 16 && elapsedSec < 24) {
                         out.println(GRAY + "   ⏳ Training Prophet relative humidity model on diurnal cycles... (" + elapsedSec + "s elapsed)" + RESET);
                     } else if (elapsedSec >= 24 && elapsedSec < 32) {
@@ -390,6 +467,9 @@ public class ConsoleUI {
                     Thread.sleep(500);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    if (process != null && process.isAlive()) {
+                        process.destroyForcibly();
+                    }
                     break;
                 }
             }
@@ -405,6 +485,9 @@ public class ConsoleUI {
             }
 
         } catch (IOException | InterruptedException e) {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
             out.println(RED + "❌ Failed to run AI pipeline: " + e.getMessage() + RESET);
         }
     }
@@ -452,20 +535,25 @@ public class ConsoleUI {
         printBoxRow("🤖  " + BOLD + "AI WEATHER PREDICTIONS (Temp, Humidity & Rain • 7 Days)" + RESET, 70, YELLOW + "║ " + RESET, YELLOW + " ║" + RESET);
         out.println(YELLOW + "╠" + TABLE_BAR_DOUBLE + "╣" + RESET);
         String predHeader = padRight("Date", 10) + " | "
-                + padRight("Temp (Avg/Range)", 16) + " | "
+                + padRight("Temp (Range)", 15) + " | "
                 + padRight("Humidity", 8) + " | "
-                + padRight("Rain %", 10) + " | "
-                + padRight("Summary", 14);
+                + padRight("Rain %", 7) + " | "
+                + padRight("Summary", 18);
         printBoxRow(GRAY + predHeader + RESET, 70, YELLOW + "║ " + RESET, YELLOW + " ║" + RESET);
         out.println(YELLOW + "╟" + TABLE_BAR_SINGLE + "╢" + RESET);
 
         for (WeatherPrediction p : predictions) {
-            String tempAvg = formatTemperature(p.predictedTempAvg());
-            String tempRange = String.format(Locale.US, "%s (%.0f-%.0f%s)",
-                    tempAvg,
-                    isMetric ? p.predictedTempMin() : (p.predictedTempMin() * 9.0 / 5.0 + 32.0),
-                    isMetric ? p.predictedTempMax() : (p.predictedTempMax() * 9.0 / 5.0 + 32.0),
-                    isMetric ? "°C" : "°F");
+            double minTemp = isMetric ? p.predictedTempMin() : (p.predictedTempMin() * 9.0 / 5.0 + 32.0);
+            double maxTemp = isMetric ? p.predictedTempMax() : (p.predictedTempMax() * 9.0 / 5.0 + 32.0);
+            double avgTemp = isMetric ? p.predictedTempAvg() : (p.predictedTempAvg() * 9.0 / 5.0 + 32.0);
+            String unit = isMetric ? "°C" : "°F";
+
+            String tempRange;
+            if (Math.abs(avgTemp) >= 100.0) {
+                tempRange = String.format(Locale.US, "%.0f° (%.0f-%.0f%s)", avgTemp, minTemp, maxTemp, unit);
+            } else {
+                tempRange = String.format(Locale.US, "%.1f° (%.0f-%.0f%s)", avgTemp, minTemp, maxTemp, unit);
+            }
 
             String humStr = String.format(Locale.US, "💧 %.0f%%", p.predictedHumidity());
 
@@ -480,10 +568,10 @@ public class ConsoleUI {
 
             String summary = p.conditionSummary() != null ? p.conditionSummary() : "Normal";
             String row = padRight(p.forecastDate().toString(), 10) + " | "
-                    + padRight(tempRange, 16) + " | "
+                    + padRight(tempRange, 15) + " | "
                     + padRight(humStr, 8) + " | "
-                    + padRight(rainStr, 10) + " | "
-                    + padRight(truncate(summary, 14), 14);
+                    + padRight(rainStr, 7) + " | "
+                    + padRight(summary, 18);
             printBoxRow(row, 70, YELLOW + "║ " + RESET, YELLOW + " ║" + RESET);
         }
         out.println(YELLOW + "╚" + TABLE_BAR_DOUBLE + "╝" + RESET);

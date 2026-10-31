@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 public class SqliteWeatherRepository implements WeatherRepository {
@@ -31,20 +32,25 @@ public class SqliteWeatherRepository implements WeatherRepository {
     }
 
     public SqliteWeatherRepository(String dbUrl) {
-        this.dbUrl = dbUrl;
+        this.dbUrl = Objects.requireNonNull(dbUrl, "dbUrl must not be null");
         initDatabase();
     }
 
     private Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(dbUrl);
+        Connection conn = DriverManager.getConnection(dbUrl);
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA busy_timeout = 5000;");
+        }
+        return conn;
     }
 
     private void initDatabase() {
         try (Connection conn = getConnection();
                 Statement stmt = conn.createStatement()) {
 
-            // Enable WAL mode for high concurrency & speed
+            // Enable WAL mode and busy timeout for high concurrency & speed
             stmt.execute("PRAGMA journal_mode = WAL;");
+            stmt.execute("PRAGMA busy_timeout = 5000;");
 
             // 1. Weather Cache table (TTL caching)
             stmt.execute("""
@@ -62,7 +68,7 @@ public class SqliteWeatherRepository implements WeatherRepository {
                         );
                     """);
 
-            // 2. Search History table (rolling window of 30)
+            // 2. Search History table (rolling window of 35)
             stmt.execute("""
                         CREATE TABLE IF NOT EXISTS search_history (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,10 +141,16 @@ public class SqliteWeatherRepository implements WeatherRepository {
         }
     }
 
+    // ==========================================
     // Section A: Cache & History
+    // ==========================================
 
     @Override
     public Optional<Weather> getCachedWeather(String cityName, int ttlMinutes) {
+        if (cityName == null || cityName.isBlank()) {
+            return Optional.empty();
+        }
+
         String sql = """
                     SELECT city_name, country, latitude, longitude,
                            temperature, feels_like, humidity, description, wind_speed, cached_at
@@ -146,12 +158,12 @@ public class SqliteWeatherRepository implements WeatherRepository {
                     WHERE city_name = ? AND cached_at >= ?
                 """;
 
-        long cutoffEpochMillis = Instant.now().minus(Duration.ofMinutes(ttlMinutes)).toEpochMilli();
+        long cutoffEpochMillis = Instant.now().minus(Duration.ofMinutes(Math.max(0, ttlMinutes))).toEpochMilli();
 
         try (Connection conn = getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setString(1, cityName);
+            pstmt.setString(1, cityName.trim());
             pstmt.setLong(2, cutoffEpochMillis);
 
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -179,6 +191,8 @@ public class SqliteWeatherRepository implements WeatherRepository {
 
     @Override
     public void saveWeatherCache(Weather weather) {
+        Objects.requireNonNull(weather, "weather must not be null");
+
         String sql = """
                     INSERT OR REPLACE INTO weather_cache
                     (city_name, country, latitude, longitude, temperature, feels_like, humidity, description, wind_speed, cached_at)
@@ -208,15 +222,17 @@ public class SqliteWeatherRepository implements WeatherRepository {
 
     @Override
     public void addSearchHistory(Weather weather) {
+        Objects.requireNonNull(weather, "weather must not be null");
+
         String insertSql = """
                     INSERT INTO search_history (city_name, temperature, condition, searched_at)
                     VALUES (?, ?, ?, ?)
                 """;
 
-        // Rolling window: keeps only the 35 newest searches
+        // Rolling window: keeps only the 35 newest searches (tie-broken by id)
         String pruneSql = """
                     DELETE FROM search_history WHERE id NOT IN (
-                        SELECT id FROM search_history ORDER BY searched_at DESC LIMIT 35
+                        SELECT id FROM search_history ORDER BY searched_at DESC, id DESC LIMIT 35
                     )
                 """;
 
@@ -240,7 +256,10 @@ public class SqliteWeatherRepository implements WeatherRepository {
                 conn.rollback();
                 throw ex;
             } finally {
-                conn.setAutoCommit(true);
+                try {
+                    conn.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Error saving search history", e);
@@ -252,7 +271,7 @@ public class SqliteWeatherRepository implements WeatherRepository {
         String sql = """
                     SELECT id, city_name, temperature, condition, searched_at
                     FROM search_history
-                    ORDER BY searched_at DESC
+                    ORDER BY searched_at DESC, id DESC
                     LIMIT ?
                 """;
 
@@ -260,7 +279,7 @@ public class SqliteWeatherRepository implements WeatherRepository {
         try (Connection conn = getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setInt(1, limit);
+            pstmt.setInt(1, Math.max(1, limit));
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     records.add(new SearchRecord(
@@ -287,7 +306,10 @@ public class SqliteWeatherRepository implements WeatherRepository {
         }
     }
 
+    // ==========================================
     // Section B: Home City & ML Data
+    // ==========================================
+
     @Override
     public Optional<HomeCityConfig> getHomeCityConfig() {
         String sql = "SELECT city_name, latitude, longitude, last_synced_at FROM home_city_config WHERE id = 1";
@@ -313,6 +335,8 @@ public class SqliteWeatherRepository implements WeatherRepository {
 
     @Override
     public void saveHomeCityConfig(HomeCityConfig config) {
+        Objects.requireNonNull(config, "config must not be null");
+
         String sql = """
                     INSERT OR REPLACE INTO home_city_config (id, city_name, latitude, longitude, last_synced_at)
                     VALUES (1, ?, ?, ?, ?)
@@ -338,6 +362,8 @@ public class SqliteWeatherRepository implements WeatherRepository {
 
     @Override
     public void saveHourlyWeatherBatch(List<HourlyWeatherRecord> records) {
+        Objects.requireNonNull(records, "records must not be null");
+
         String sql = """
                     INSERT OR REPLACE INTO home_city_hourly (timestamp, temperature, humidity, precipitation)
                     VALUES (?, ?, ?, ?)
@@ -364,7 +390,10 @@ public class SqliteWeatherRepository implements WeatherRepository {
                 conn.rollback();
                 throw ex;
             } finally {
-                conn.setAutoCommit(true);
+                try {
+                    conn.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Error saving hourly weather batch", e);
@@ -373,6 +402,9 @@ public class SqliteWeatherRepository implements WeatherRepository {
 
     @Override
     public List<HourlyWeatherRecord> getHourlyWeatherData(LocalDateTime from, LocalDateTime to) {
+        Objects.requireNonNull(from, "from date must not be null");
+        Objects.requireNonNull(to, "to date must not be null");
+
         String sql = """
                     SELECT timestamp, temperature, humidity, precipitation
                     FROM home_city_hourly
@@ -420,6 +452,8 @@ public class SqliteWeatherRepository implements WeatherRepository {
 
     @Override
     public void savePredictions(List<WeatherPrediction> predictions) {
+        Objects.requireNonNull(predictions, "predictions must not be null");
+
         String sql = """
                     INSERT OR REPLACE INTO predictions
                     (forecast_date, predicted_temp_avg, predicted_temp_min, predicted_temp_max,
@@ -448,7 +482,10 @@ public class SqliteWeatherRepository implements WeatherRepository {
                 conn.rollback();
                 throw ex;
             } finally {
-                conn.setAutoCommit(true);
+                try {
+                    conn.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Error saving predictions", e);
@@ -457,6 +494,8 @@ public class SqliteWeatherRepository implements WeatherRepository {
 
     @Override
     public List<WeatherPrediction> getPredictions(LocalDate fromDate) {
+        Objects.requireNonNull(fromDate, "fromDate must not be null");
+
         String sql = """
                     SELECT forecast_date, predicted_temp_avg, predicted_temp_min, predicted_temp_max,
                            predicted_humidity, predicted_rain_prob, predicted_rainfall_mm,

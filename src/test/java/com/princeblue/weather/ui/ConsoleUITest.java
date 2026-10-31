@@ -142,8 +142,13 @@ public class ConsoleUITest {
         Location loc = new Location("Pune", "IN", 18.52, 73.86);
         Weather weather = new Weather(loc, 28.0, 27.5, 55, "clear sky", 2.5);
         java.util.List<com.princeblue.weather.model.WeatherPrediction> preds = java.util.List.of(
-                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now(), 26.5, 21.2, 31.8, 85.0, 95.0, 8.5, "Rain Likely", java.time.Instant.now()),
-                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(1), 27.0, 22.0, 32.5, 60.0, 35.0, 1.2, "Partly cloudy", java.time.Instant.now())
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now(), 20.4, 16.6, 24.0, 98.0, 99.6, 38.0, "⛈️ Heavy Rain", java.time.Instant.now()),
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(1), 24.5, 16.3, 33.3, 82.7, 96.7, 3.4, "🌧️ Rain Likely", java.time.Instant.now()),
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(2), 24.5, 16.5, 33.7, 82.5, 29.2, 1.5, "⛅ Chance of Rain", java.time.Instant.now()),
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(3), 24.9, 16.7, 33.8, 80.9, 68.2, 2.3, "🌦️ Showers Likely", java.time.Instant.now()),
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(4), 22.0, 18.0, 26.0, 70.0, 10.0, 0.0, "⛅ Mild & Pleasant", java.time.Instant.now()),
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(5), 34.0, 25.0, 39.0, 45.0, 5.0, 0.0, "☀️ Hot & Sunny", java.time.Instant.now()),
+                new com.princeblue.weather.model.WeatherPrediction(java.time.LocalDate.now().plusDays(6), 19.0, 15.0, 22.0, 88.0, 15.0, 0.0, "🌫️ Humid / Misty", java.time.Instant.now())
         );
 
         when(mockHomeService.getHomeCityConfig()).thenReturn(java.util.Optional.of(cfg));
@@ -161,6 +166,10 @@ public class ConsoleUITest {
         String output = outBytes.toString(StandardCharsets.UTF_8);
         assertTrue(output.contains("AI WEATHER PREDICTIONS"));
         assertTrue(output.contains("Pune"));
+        assertTrue(output.contains("Chance of Rain"));
+        assertTrue(output.contains("Showers Likely"));
+        assertTrue(output.contains("Mild & Pleasant"));
+        assertTrue(output.contains("Heavy Rain"));
 
         String[] lines = output.split("\\r?\\n");
         boolean inPredTable = false;
@@ -211,7 +220,7 @@ public class ConsoleUITest {
                 .thenReturn(java.util.Optional.empty())
                 .thenReturn(java.util.Optional.of(cfg));
         when(mockHomeService.configureHomeCity("Pune")).thenReturn(cfg);
-        when(mockHomeService.syncHistoricalData(10)).thenReturn(87672);
+        when(mockHomeService.syncHistoricalData(12)).thenReturn(105192);
         when(mockHomeService.startAiPipelineProcess()).thenReturn(null);
         when(mockHomeService.getPredictions(org.mockito.ArgumentMatchers.any())).thenReturn(preds);
         when(mockService.getWeather("Pune")).thenReturn(weather);
@@ -227,12 +236,12 @@ public class ConsoleUITest {
         assertTrue(output.contains("No Home City configured yet"));
         assertTrue(output.contains("Location resolved"));
         assertTrue(output.contains("Pune"));
-        assertTrue(output.contains("Fetching 10 years of hourly climate data"));
+        assertTrue(output.contains("Fetching 12 years of hourly climate data"));
         assertTrue(output.contains("Training Facebook Prophet AI model"));
         assertTrue(output.contains("AI WEATHER PREDICTIONS"));
 
         org.mockito.Mockito.verify(mockHomeService).configureHomeCity("Pune");
-        org.mockito.Mockito.verify(mockHomeService).syncHistoricalData(10);
+        org.mockito.Mockito.verify(mockHomeService).syncHistoricalData(12);
         org.mockito.Mockito.verify(mockHomeService).startAiPipelineProcess();
     }
 }

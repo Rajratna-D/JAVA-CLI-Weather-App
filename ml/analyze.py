@@ -1,3 +1,17 @@
+import sys
+from pathlib import Path
+
+# Force UTF-8 encoding on standard streams if supported
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+# Ensure ml directory is on sys.path
+ML_DIR = Path(__file__).resolve().parent
+if str(ML_DIR) not in sys.path:
+    sys.path.insert(0, str(ML_DIR))
+
 import time
 import pandas as pd
 import numpy as np
@@ -53,6 +67,8 @@ def evaluate_model_performance(df, test_days=30):
 def analyze_weather_data():
     print("Loading historical weather records from SQLite...")
     df = load_training_data()
+    # Map 'temperature' to 'y' for Prophet and statistical calculations
+    df["y"] = df["temperature"]
 
     print("\n" + "=" * 60)
     print("             CLIMATE INSIGHTS FOR YOUR HOME CITY")
