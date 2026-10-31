@@ -7,6 +7,8 @@ import com.princeblue.weather.model.HourlyWeatherRecord;
 import com.princeblue.weather.model.WeatherPrediction;
 import com.princeblue.weather.repository.WeatherRepository;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -55,7 +57,7 @@ public class HomeCityService {
      * Downloads hourly historical weather data for the home city from Open-Meteo
      * and stores it into SQLite.
      *
-     * @param yearsBack Number of years of history to download (e.g. 5 or 10)
+     * @param yearsBack Number of years of history to download (e.g. 5 or 12)
      * @return Number of hourly records downloaded and stored
      */
     public int syncHistoricalData(int yearsBack) throws WeatherAppException {
@@ -98,36 +100,61 @@ public class HomeCityService {
     }
 
     /**
-     * Resolves the Python executable path, checking virtualenv first, then system PATH.
+     * Resolves the Python executable path, checking virtual environments (both ml/.venv and .venv),
+     * then falling back to system PATH.
      */
     public String findPythonExecutable() {
-        java.io.File winVenv = new java.io.File("ml/.venv/Scripts/python.exe");
-        if (winVenv.exists()) {
-            return winVenv.getAbsolutePath();
+        File[] candidatePaths = new File[] {
+                new File("ml/.venv/Scripts/python.exe"),
+                new File(".venv/Scripts/python.exe"),
+                new File("ml/.venv/bin/python"),
+                new File(".venv/bin/python")
+        };
+
+        for (File candidate : candidatePaths) {
+            if (candidate.exists()) {
+                return candidate.getAbsolutePath();
+            }
         }
-        java.io.File unixVenv = new java.io.File("ml/.venv/bin/python");
-        if (unixVenv.exists()) {
-            return unixVenv.getAbsolutePath();
-        }
+
         return "python";
     }
 
     /**
-     * Starts the Facebook Prophet ML training & prediction pipeline as an external process.
+     * Starts the multi-variate ML training & prediction pipeline as an external process.
+     * Sets process working directory to project root and forces UTF-8 IO encoding.
      */
-    public Process startAiPipelineProcess() throws java.io.IOException {
+    public Process startAiPipelineProcess() throws IOException {
         String pythonExe = findPythonExecutable();
+        File workingDir = new File(".").getAbsoluteFile();
+        if (workingDir.getName().equals(".")) {
+            workingDir = workingDir.getParentFile();
+        }
+
         ProcessBuilder pb = new ProcessBuilder(pythonExe, "ml/pipeline.py");
+        if (workingDir != null && workingDir.exists()) {
+            pb.directory(workingDir);
+        }
+        pb.environment().put("PYTHONIOENCODING", "utf-8");
         pb.redirectErrorStream(true);
         return pb.start();
     }
 
     /**
-     * Checks if the trained Prophet model file exists on disk.
+     * Checks if trained model files exist on disk.
      */
     public boolean isAiModelAvailable() {
-        java.io.File tempModel = new java.io.File("ml/models/prophet_temp_model.pkl");
-        java.io.File legacyModel = new java.io.File("ml/models/prophet_weather_model.pkl");
-        return (tempModel.exists() && tempModel.length() > 0) || (legacyModel.exists() && legacyModel.length() > 0);
+        File[] models = new File[] {
+                new File("ml/models/prophet_temp_model.json"),
+                new File("ml/models/prophet_temp_model.pkl"),
+                new File("ml/models/prophet_weather_model.pkl")
+        };
+
+        for (File m : models) {
+            if (m.exists() && m.length() > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 }

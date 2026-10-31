@@ -1,4 +1,18 @@
 # SQLite database utility functions for multi-variate weather ML
+import sys
+from pathlib import Path
+
+# Force UTF-8 encoding on standard streams if supported
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+# Ensure ml directory is on sys.path
+ML_DIR = Path(__file__).resolve().parent
+if str(ML_DIR) not in sys.path:
+    sys.path.insert(0, str(ML_DIR))
+
 import sqlite3
 import pandas as pd
 from datetime import datetime, timezone
@@ -7,7 +21,10 @@ from config import DB_PATH
 def get_connection():
     if not DB_PATH.exists():
         raise FileNotFoundError(f"Database file not found at: {DB_PATH}. Please sync data in the Java app first.")
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    return conn
 
 def load_training_data():
     """

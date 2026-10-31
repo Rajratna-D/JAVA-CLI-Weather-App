@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 public class OpenMeteoClient {
@@ -42,6 +43,10 @@ public class OpenMeteoClient {
      * Resolves a city name to its latitude and longitude coordinates.
      */
     public GeocodingResult geocodeCity(String cityName) throws WeatherAppException {
+        if (cityName == null || cityName.isBlank()) {
+            throw new IllegalArgumentException("City name cannot be blank");
+        }
+
         String encodedCity = URLEncoder.encode(cityName.trim(), StandardCharsets.UTF_8);
         String url = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodedCity + "&count=1";
 
@@ -58,13 +63,20 @@ public class OpenMeteoClient {
                 throw new ApiUnavailableException("Open-Meteo Geocoding failed with status: " + response.statusCode());
             }
 
-            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-            if (!json.has("results") || json.getAsJsonArray("results").isEmpty()) {
+            JsonElement rootElement = JsonParser.parseString(response.body());
+            if (!rootElement.isJsonObject()) {
+                throw new ApiUnavailableException("Open-Meteo Geocoding returned unexpected payload.");
+            }
+
+            JsonObject json = rootElement.getAsJsonObject();
+            if (!json.has("results") || !json.get("results").isJsonArray() || json.getAsJsonArray("results").isEmpty()) {
                 throw new CityNotFoundException("City not found in geocoding: " + cityName);
             }
 
             JsonObject firstResult = json.getAsJsonArray("results").get(0).getAsJsonObject();
-            String name = firstResult.get("name").getAsString();
+            String name = firstResult.has("name") && !firstResult.get("name").isJsonNull()
+                    ? firstResult.get("name").getAsString()
+                    : cityName.trim();
             double lat = firstResult.get("latitude").getAsDouble();
             double lon = firstResult.get("longitude").getAsDouble();
 
@@ -82,11 +94,12 @@ public class OpenMeteoClient {
 
     /**
      * Fetches historical hourly weather data for the specified date range.
+     * Uses Locale.ROOT to guarantee dot-separated decimal coordinates worldwide.
      */
     public List<HourlyWeatherRecord> fetchHistoricalHourlyData(
             double latitude, double longitude, LocalDate startDate, LocalDate endDate) throws WeatherAppException {
 
-        String url = String.format(
+        String url = String.format(Locale.ROOT,
                 "https://archive-api.open-meteo.com/v1/archive?latitude=%.4f&longitude=%.4f&start_date=%s&end_date=%s&hourly=temperature_2m,relative_humidity_2m,precipitation",
                 latitude, longitude, startDate, endDate);
 
@@ -104,26 +117,43 @@ public class OpenMeteoClient {
                         "Open-Meteo Archive API failed with status: " + response.statusCode());
             }
 
-            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-            if (!json.has("hourly")) {
+            JsonElement rootElement = JsonParser.parseString(response.body());
+            if (!rootElement.isJsonObject()) {
+                throw new ApiUnavailableException("Open-Meteo response is not a valid JSON object.");
+            }
+
+            JsonObject json = rootElement.getAsJsonObject();
+            if (!json.has("hourly") || !json.get("hourly").isJsonObject()) {
                 throw new ApiUnavailableException("Open-Meteo response missing 'hourly' data field.");
             }
 
             JsonObject hourly = json.getAsJsonObject("hourly");
+            if (!hourly.has("time") || !hourly.get("time").isJsonArray()) {
+                throw new ApiUnavailableException("Open-Meteo response missing 'hourly.time' data field.");
+            }
+
             JsonArray times = hourly.getAsJsonArray("time");
-            JsonArray temps = hourly.getAsJsonArray("temperature_2m");
-            JsonArray hums = hourly.getAsJsonArray("relative_humidity_2m");
-            JsonArray precs = hourly.getAsJsonArray("precipitation");
+            JsonArray temps = hourly.has("temperature_2m") && hourly.get("temperature_2m").isJsonArray()
+                    ? hourly.getAsJsonArray("temperature_2m") : null;
+            JsonArray hums = hourly.has("relative_humidity_2m") && hourly.get("relative_humidity_2m").isJsonArray()
+                    ? hourly.getAsJsonArray("relative_humidity_2m") : null;
+            JsonArray precs = hourly.has("precipitation") && hourly.get("precipitation").isJsonArray()
+                    ? hourly.getAsJsonArray("precipitation") : null;
 
-            List<HourlyWeatherRecord> records = new ArrayList<>(times.size());
+            int size = times.size();
+            if (temps != null) size = Math.min(size, temps.size());
+            if (hums != null) size = Math.min(size, hums.size());
+            if (precs != null) size = Math.min(size, precs.size());
 
-            for (int i = 0; i < times.size(); i++) {
+            List<HourlyWeatherRecord> records = new ArrayList<>(size);
+
+            for (int i = 0; i < size; i++) {
                 String timeStr = times.get(i).getAsString();
                 LocalDateTime dt = LocalDateTime.parse(timeStr);
 
-                double temp = getDoubleOrDefault(temps.get(i), 0.0);
-                double hum = getDoubleOrDefault(hums.get(i), 0.0);
-                double prec = getDoubleOrDefault(precs.get(i), 0.0);
+                double temp = getDoubleOrDefault(temps != null ? temps.get(i) : null, 0.0);
+                double hum = getDoubleOrDefault(hums != null ? hums.get(i) : null, 0.0);
+                double prec = getDoubleOrDefault(precs != null ? precs.get(i) : null, 0.0);
 
                 records.add(new HourlyWeatherRecord(dt, temp, hum, prec));
             }

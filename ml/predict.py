@@ -1,17 +1,65 @@
 # Multi-variate Prophet & Scikit-Learn Prediction Script
+import sys
+from pathlib import Path
+
+# Force UTF-8 encoding on standard streams if supported
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+# Ensure ml directory is on sys.path
+ML_DIR = Path(__file__).resolve().parent
+if str(ML_DIR) not in sys.path:
+    sys.path.insert(0, str(ML_DIR))
+
 import pickle
 import joblib
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from config import TEMP_MODEL_PATH, HUMIDITY_MODEL_PATH, RAIN_MODEL_PATH, RAINFALL_MODEL_PATH, FORECAST_DAYS
+from config import (
+    TEMP_MODEL_PATH,
+    TEMP_MODEL_JSON_PATH,
+    HUMIDITY_MODEL_PATH,
+    HUMIDITY_MODEL_JSON_PATH,
+    RAIN_MODEL_PATH,
+    RAINFALL_MODEL_PATH,
+    FORECAST_DAYS
+)
 from db_utils import save_predictions_to_db
+
+def load_prophet_model(json_path, pkl_path):
+    """
+    Loads Prophet model securely from JSON if available, falling back to pickle.
+    """
+    if json_path.exists():
+        try:
+            from prophet.serialize import model_from_json
+            with open(json_path, "r", encoding="utf-8") as f:
+                return model_from_json(f.read())
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to load model from JSON ({e}), falling back to pickle.")
+
+    if pkl_path.exists():
+        with open(pkl_path, "rb") as f:
+            return pickle.load(f)
+
+    return None
 
 def generate_condition_summary(avg_temp, min_temp, max_temp, humidity, rain_prob, rainfall_mm):
     """
     Intelligently generates weather summary taking into account temperature,
     relative humidity, rain probability, and expected precipitation volume.
     """
+    if avg_temp <= 1.0:
+        if rain_prob >= 70.0:
+            return "🌨️ Heavy Snow"
+        elif rain_prob >= 40.0:
+            return "❄️ Snow Likely"
+        elif rain_prob >= 20.0:
+            return "❄️ Chance of Snow"
+
     if rain_prob >= 70.0:
         if rainfall_mm >= 12.0:
             return "⛈️ Heavy Rain"
@@ -37,21 +85,20 @@ def generate_condition_summary(avg_temp, min_temp, max_temp, humidity, rain_prob
             return "❄️ Chilly"
 
 def run_predictions():
-    if not TEMP_MODEL_PATH.exists():
-        raise FileNotFoundError(f"Model file not found at: {TEMP_MODEL_PATH}. Please run train.py first!")
+    temp_model = load_prophet_model(TEMP_MODEL_JSON_PATH, TEMP_MODEL_PATH)
+    if temp_model is None:
+        raise FileNotFoundError(f"Temperature model not found at {TEMP_MODEL_JSON_PATH} or {TEMP_MODEL_PATH}. Please run train.py first!")
 
     print(f" Loading trained models from disk...")
-    with open(TEMP_MODEL_PATH, "rb") as f:
-        temp_model = pickle.load(f)
-
-    hum_model = None
-    if HUMIDITY_MODEL_PATH.exists():
-        with open(HUMIDITY_MODEL_PATH, "rb") as f:
-            hum_model = pickle.load(f)
+    hum_model = load_prophet_model(HUMIDITY_MODEL_JSON_PATH, HUMIDITY_MODEL_PATH)
 
     rain_clf = None
     if RAIN_MODEL_PATH.exists():
-        rain_clf = joblib.load(RAIN_MODEL_PATH)
+        try:
+            rain_clf = joblib.load(RAIN_MODEL_PATH)
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to load rain classifier: {e}")
+            rain_clf = None
 
     rainfall_reg = None
     if RAINFALL_MODEL_PATH.exists():
@@ -101,13 +148,24 @@ def run_predictions():
         }])
 
         if rain_clf is not None:
-            rain_prob = float(rain_clf.predict_proba(feature_df)[0][1] * 100.0)
-            rain_prob = float(np.clip(rain_prob, 0.0, 100.0))
+            try:
+                classes = list(rain_clf.classes_)
+                if 1 in classes:
+                    class_idx = classes.index(1)
+                    rain_prob = float(rain_clf.predict_proba(feature_df)[0][class_idx] * 100.0)
+                else:
+                    rain_prob = 0.0
+                rain_prob = float(np.clip(rain_prob, 0.0, 100.0))
+            except Exception:
+                rain_prob = 0.0
         else:
             rain_prob = 0.0
 
         if rain_prob >= 20.0 and rainfall_reg is not None:
-            expected_rainfall = float(np.clip(rainfall_reg.predict(feature_df)[0], 0.0, 200.0))
+            try:
+                expected_rainfall = float(np.clip(rainfall_reg.predict(feature_df)[0], 0.0, 200.0))
+            except Exception:
+                expected_rainfall = 0.0
         else:
             expected_rainfall = 0.0
 

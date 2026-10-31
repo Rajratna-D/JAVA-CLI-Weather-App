@@ -32,6 +32,9 @@ public class OpenWeatherClient implements ApiClient {
 
     @Override
     public String fetchWeatherData(String cityName) throws WeatherAppException {
+        if (cityName == null || cityName.isBlank()) {
+            throw new IllegalArgumentException("City name cannot be blank");
+        }
 
         String encodedCity = URLEncoder.encode(cityName.trim(), StandardCharsets.UTF_8);
         String url = "https://api.openweathermap.org/data/2.5/weather"

@@ -5,13 +5,35 @@
 # 3. Scikit-Learn Classifier for Rain Probability (%)
 # 4. Scikit-Learn Regressor for Expected Rainfall Amount (mm)
 
+import sys
+from pathlib import Path
+
+# Force UTF-8 encoding on standard streams if supported
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+# Ensure ml directory is on sys.path
+ML_DIR = Path(__file__).resolve().parent
+if str(ML_DIR) not in sys.path:
+    sys.path.insert(0, str(ML_DIR))
+
 import time
 import pickle
 import joblib
 import numpy as np
 import pandas as pd
 from prophet import Prophet
-from config import TEMP_MODEL_PATH, HUMIDITY_MODEL_PATH, RAIN_MODEL_PATH, RAINFALL_MODEL_PATH, CONFIDENCE_INTERVAL
+from config import (
+    TEMP_MODEL_PATH,
+    TEMP_MODEL_JSON_PATH,
+    HUMIDITY_MODEL_PATH,
+    HUMIDITY_MODEL_JSON_PATH,
+    RAIN_MODEL_PATH,
+    RAINFALL_MODEL_PATH,
+    CONFIDENCE_INTERVAL
+)
 from db_utils import load_training_data
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 
@@ -32,6 +54,15 @@ def train_weather_models():
         changepoint_prior_scale=0.05
     )
     temp_model.fit(temp_df)
+
+    # Save safe JSON format
+    try:
+        from prophet.serialize import model_to_json
+        with open(TEMP_MODEL_JSON_PATH, "w", encoding="utf-8") as f:
+            f.write(model_to_json(temp_model))
+    except Exception as e:
+        print(f"⚠️ Warning: Could not export temperature model to JSON: {e}")
+
     with open(TEMP_MODEL_PATH, "wb") as f:
         pickle.dump(temp_model, f)
     print(f"✅ Temperature model trained in {time.time() - t0:.1f}s -> Saved to {TEMP_MODEL_PATH.name}")
@@ -48,6 +79,15 @@ def train_weather_models():
         changepoint_prior_scale=0.05
     )
     hum_model.fit(hum_df)
+
+    # Save safe JSON format
+    try:
+        from prophet.serialize import model_to_json
+        with open(HUMIDITY_MODEL_JSON_PATH, "w", encoding="utf-8") as f:
+            f.write(model_to_json(hum_model))
+    except Exception as e:
+        print(f"⚠️ Warning: Could not export humidity model to JSON: {e}")
+
     with open(HUMIDITY_MODEL_PATH, "wb") as f:
         pickle.dump(hum_model, f)
     print(f"✅ Humidity model trained in {time.time() - t0:.1f}s -> Saved to {HUMIDITY_MODEL_PATH.name}")
