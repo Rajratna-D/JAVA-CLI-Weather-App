@@ -107,11 +107,14 @@ def run_predictions():
         except Exception:
             rainfall_reg = None
 
-    # Generate future hourly timestamps (7 days * 24 hours = 168 hours)
+    # Generate future hourly timestamps from the current date (today + 7 days)
     future_hours = FORECAST_DAYS * 24
     print(f" Projecting multi-variate forecast for the next {FORECAST_DAYS} days ({future_hours} hours)...")
 
-    future = temp_model.make_future_dataframe(periods=future_hours, freq="h", include_history=False)
+    start_time = pd.Timestamp.now().floor("h")
+    future = pd.DataFrame({
+        "ds": pd.date_range(start=start_time, periods=future_hours, freq="h")
+    })
     temp_forecast = temp_model.predict(future)
 
     hum_forecast = None
